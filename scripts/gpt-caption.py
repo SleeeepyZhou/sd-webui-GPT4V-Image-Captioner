@@ -177,8 +177,10 @@ def process_batch_watermark_detection(api_key, prompt, api_url, image_dir, detec
     results = f"Total checked images: {len(results)}"
     return results
 
+# GPT Prompt
+def update_textbox(prompt):
+    return prompt
 
-# GPT Prompts CSV
 def get_prompts_from_csv():
     if not os.path.exists(PROMPTS_CSV_PATH):
         return []
@@ -186,10 +188,9 @@ def get_prompts_from_csv():
         reader = csv.reader(file)
         # remove empty rows
         return [row[0] for row in reader if row]
-
+            
 def save_prompt(prompt):
-    print(f"Saving prompt: {prompt}")
-    # Append prompt to CSV
+    # Append CSV
     with open(PROMPTS_CSV_PATH, 'a+', newline='', encoding='utf-8') as file:
         # Move to start
         file.seek(0)
@@ -200,7 +201,7 @@ def save_prompt(prompt):
             writer.writerow([prompt])
         # Move to end
         file.seek(0, os.SEEK_END)
-    return gr.Dropdown(label="Saved Prompts", choices=get_prompts_from_csv(), type="value", interactive=True)
+    return gr.Dropdown.update(choices=get_prompts_from_csv())
 
 def delete_prompt(prompt):
     lines = []
@@ -210,7 +211,7 @@ def delete_prompt(prompt):
     with open(PROMPTS_CSV_PATH, 'w', newline='', encoding='utf-8') as writeFile:
         writer = csv.writer(writeFile)
         writer.writerows(lines)
-    return gr.Dropdown(label="Saved Prompts", choices=get_prompts_from_csv(), type="value", interactive=True)
+    return gr.Dropdown.update(choices=get_prompts_from_csv())
 
 
 # Tag Manage
@@ -312,22 +313,17 @@ def on_ui_tabs():
                                   lines=5)
 
         with gr.Accordion("Prompt Saving / 提示词存档", open=False):
-            saved_prompts = get_prompts_from_csv()
-            saved_prompts_dropdown = gr.Dropdown(label="Saved Prompts / 提示词存档", choices=saved_prompts, type="value",
-                                                 interactive=True)
-
-
-            def update_textbox(prompt):
-                return prompt
-
-
+            saved_pro = get_prompts_from_csv()
+            saved_prompts_dropdown = gr.Dropdown(label="Saved Prompts / 提示词存档", choices=saved_pro, type="value",interactive=True)
             with gr.Row():
                 save_prompt_button = gr.Button("Save Prompt / 保存提示词")
                 delete_prompt_button = gr.Button("Delete Prompt / 删除提示词")
                 load_prompt_button = gr.Button("Load Prompt / 读取到输入框")
-            save_prompt_button.click(save_prompt, inputs=prompt_input, outputs=saved_prompts_dropdown)
+
+            save_prompt_button.click(save_prompt, inputs=prompt_input,outputs=[saved_prompts_dropdown])
+            delete_prompt_button.click(delete_prompt, inputs=saved_prompts_dropdown, outputs=[saved_prompts_dropdown])
             load_prompt_button.click(update_textbox, inputs=saved_prompts_dropdown, outputs=prompt_input)
-            delete_prompt_button.click(delete_prompt, inputs=saved_prompts_dropdown, outputs=saved_prompts_dropdown)
+
 
         with gr.Tab("Single Image / 单图处理"):
             with gr.Row():
