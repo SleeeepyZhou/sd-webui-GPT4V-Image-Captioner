@@ -1,18 +1,74 @@
 import os
 import collections
 import random
+from re import S
 from wordcloud import WordCloud
 import matplotlib.pyplot as plt
 import networkx as nx
 from itertools import combinations
-import scipy as sp
+
+
+def save_path(folder_path,file_name):
+    n_path = os.path.join(folder_path, "Tag_analysis")
+    if not os.path.exists(n_path):
+        try:
+            os.makedirs(n_path)
+        except Exception as e:
+            print(f"Error : {e}")
+    save_path = os.path.join(n_path, file_name)
+    return save_path
+
+def modify_tags_in_folder(folder_path, tags_to_remove, tags_to_replace_dict, new_tag, insert_position):
+    for root, dirs, files in os.walk(folder_path):
+        for file in files:
+            if file.endswith('.txt'):
+                file_path = os.path.join(root, file)
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                    tags = [tag.strip() for tag in content.split(',')]
+                # 删除标签
+                tags = [tag for tag in tags if tag not in tags_to_remove]
+                # 替换标签
+                for old_tag, new_tag_replacement in tags_to_replace_dict.items():
+                    tags = [new_tag_replacement if tag == old_tag else tag for tag in tags]
+                # 添加标签
+                if new_tag and new_tag.strip(): 
+                    if insert_position == 'Start / 开始':
+                        tags.insert(0, new_tag.strip())
+                    elif insert_position == 'End / 结束':
+                        tags.append(new_tag.strip())
+                    elif insert_position == 'Random / 随机':
+                        random_index = random.randrange(len(tags)+1)
+                        tags.insert(random_index, new_tag.strip())
+                
+                # 保存修改后的文件
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    updated_content = ', '.join(tags)
+                    f.write(updated_content)
+                    
+    return "Tags modified successfully."
+
+def count_tags_in_folder(folder_path, top_n):
+    tags_counter = collections.Counter()
+    for root, dirs, files in os.walk(folder_path):
+        for file in files:
+            if file.endswith('.txt'):
+                file_path = os.path.join(root, file)
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                    tags = content.split(',')
+                    tags = [tag.strip() for tag in tags]
+                    tags_counter.update(tags)
+
+    sorted_tags = sorted(tags_counter.items(), key=lambda x: x[1], reverse=True)
+    return sorted_tags[:top_n]
 
 def generate_network_graph(folder_path, top_n):
     G = nx.Graph()
     tags_cooccurrence = collections.defaultdict(int)
 
     # 读取文件并计算标签的共现关系
-    for root, dirs, files in os.walk(folder_path):
+    for root, files in os.walk(folder_path):
         for file in files:
             if file.endswith('.txt'):
                 file_path = os.path.join(root, file)
@@ -64,64 +120,22 @@ def generate_network_graph(folder_path, top_n):
 
     # 移除坐标轴
     plt.axis('off')
-
+    
     # 保存图像
-    plt.savefig('tag_network.png', format='png', dpi=300, bbox_inches='tight', facecolor=gradio_blue)
+    save_network = save_path(folder_path,'tag_network.png')
+    plt.savefig(save_network, format='png', dpi=300, bbox_inches='tight', facecolor=gradio_blue)
     plt.close()
-    return 'tag_network.png'
+    return save_network
 
-def count_tags_in_folder(folder_path, top_n):
-    tags_counter = collections.Counter()
-    for root, dirs, files in os.walk(folder_path):
-        for file in files:
-            if file.endswith('.txt'):
-                file_path = os.path.join(root, file)
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    content = f.read()
-                    tags = content.split(',')
-                    tags = [tag.strip() for tag in tags]
-                    tags_counter.update(tags)
-
-    sorted_tags = sorted(tags_counter.items(), key=lambda x: x[1], reverse=True)
-    return sorted_tags[:top_n]
-
-def generate_wordcloud(tag_counts):
+def generate_wordcloud(folder_path, top):
+    tag_counts = count_tags_in_folder(folder_path, top)
     wordcloud = WordCloud(width=1600, height=1200, background_color='white')
     wordcloud.generate_from_frequencies(dict(tag_counts))
     plt.figure(figsize=(20, 15))
     plt.imshow(wordcloud, interpolation='bilinear')
     plt.axis('off')
     plt.tight_layout(pad=0)
-    plt.savefig('tag_wordcloud.png', format='png')
+    save_wordcloud = save_path(folder_path,'tag_wordcloud.png')
+    plt.savefig(save_wordcloud, format='png')
     plt.close()
-    return 'tag_wordcloud.png'
-
-def modify_tags_in_folder(folder_path, tags_to_remove, tags_to_replace_dict, new_tag, insert_position):
-    for root, dirs, files in os.walk(folder_path):
-        for file in files:
-            if file.endswith('.txt'):
-                file_path = os.path.join(root, file)
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    content = f.read()
-                    tags = [tag.strip() for tag in content.split(',')]
-                # 删除标签
-                tags = [tag for tag in tags if tag not in tags_to_remove]
-                # 替换标签
-                for old_tag, new_tag_replacement in tags_to_replace_dict.items():
-                    tags = [new_tag_replacement if tag == old_tag else tag for tag in tags]
-                # 添加标签
-                if new_tag and new_tag.strip(): 
-                    if insert_position == 'Start / 开始':
-                        tags.insert(0, new_tag.strip())
-                    elif insert_position == 'End / 结束':
-                        tags.append(new_tag.strip())
-                    elif insert_position == 'Random / 随机':
-                        random_index = random.randrange(len(tags)+1)
-                        tags.insert(random_index, new_tag.strip())
-                
-                # 保存修改后的文件
-                with open(file_path, 'w', encoding='utf-8') as f:
-                    updated_content = ', '.join(tags)
-                    f.write(updated_content)
-                    
-    return "Tags modified successfully."
+    return save_wordcloud
