@@ -1,43 +1,27 @@
 ﻿import gradio as gr
-import csv
 import os
 import shutil
 import threading
-import subprocess
+
 import concurrent.futures
 from tqdm import tqdm
 
 from modules import script_callbacks
 
-from lib import Translator
-from lib.ImgProcessing import process_images_in_folder
-from lib.Tag_Processor import count_tags_in_folder, modify_tags_in_folder, generate_wordcloud, generate_network_graph
-from lib.GPT4V_run import run_openai_api, unique_elements
-from lib.GPT4Vapi_utils import save_api_details, get_api_details
+from lib.Img_Processing import process_images_in_folder, run_script
+from lib.Tag_Processor import modify_file_content, process_tags
+from lib.GPT_Prompt import get_prompts_from_csv, save_prompt, delete_prompt
+from lib.Api_Utils import run_openai_api, save_api_details, get_api_details
 
 
 os.environ["GRADIO_ANALYTICS_ENABLED"] = "False"
-PROMPTS_CSV_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "saved_prompts.csv")
-should_stop = threading.Event()
 saved_api_key, saved_api_url = get_api_details()
 
-
-# Process image
+# 图像打标
+should_stop = threading.Event()
 def stop_batch_processing():
     should_stop.set()
     return "Attempting to stop batch processing. Please wait for the current image to finish."
-
-def run_script(folder_path, keywords):
-    keywords = keywords if keywords else "sorry,error"
-    result = subprocess.run(
-        [
-            'python', './lib/Failed_Tagging_File_Screening.py',
-            '--image_path', folder_path,
-            '--keywords', keywords
-        ],
-        capture_output=True, text=True
-    )
-    return result.stdout if result.stdout else "No Output", result.stderr if result.stderr else "No Error"
 
 def process_single_image(api_key, prompt, api_url, image_path, quality, timeout):
     save_api_details(api_key, api_url)
@@ -177,117 +161,8 @@ def process_batch_watermark_detection(api_key, prompt, api_url, image_dir, detec
     results = f"Total checked images: {len(results)}"
     return results
 
-# GPT Prompt
-def update_textbox(prompt):
-    return prompt
 
-def get_prompts_from_csv():
-    if not os.path.exists(PROMPTS_CSV_PATH):
-        return []
-    with open(PROMPTS_CSV_PATH, 'r', newline='', encoding='utf-8') as file:
-        reader = csv.reader(file)
-        # remove empty rows
-        return [row[0] for row in reader if row]
-            
-def save_prompt(prompt):
-    # Append CSV
-    with open(PROMPTS_CSV_PATH, 'a+', newline='', encoding='utf-8') as file:
-        # Move to start
-        file.seek(0)
-        reader = csv.reader(file)
-        existing_prompts = [row[0] for row in reader]
-        if prompt not in existing_prompts:
-            writer = csv.writer(file)
-            writer.writerow([prompt])
-        # Move to end
-        file.seek(0, os.SEEK_END)
-    return gr.Dropdown.update(choices=get_prompts_from_csv())
-
-def delete_prompt(prompt):
-    lines = []
-    with open(PROMPTS_CSV_PATH, 'r', newline='', encoding='utf-8') as readFile:
-        reader = csv.reader(readFile)
-        lines = [row for row in reader if row and row[0] != prompt]
-    with open(PROMPTS_CSV_PATH, 'w', newline='', encoding='utf-8') as writeFile:
-        writer = csv.writer(writeFile)
-        writer.writerows(lines)
-    return gr.Dropdown.update(choices=get_prompts_from_csv())
-
-
-# Tag Manage
-def modify_file_content(file_path, new_content, mode):
-    if mode == "skip/跳过" and os.path.exists(file_path):
-        print(f"Skip writing, as the file {file_path} already exists.")
-        return
-
-    if mode == "overwrite/覆盖" or not os.path.exists(file_path):
-        with open(file_path, 'w', encoding='utf-8') as file:
-            file.write(new_content)
-        return
-
-    with open(file_path, 'r+', encoding='utf-8') as file:
-        existing_content = file.read()
-        file.seek(0)
-        if mode == "prepend/前置插入":
-            combined_content = unique_elements(new_content, existing_content)
-            file.write(combined_content)
-            file.truncate()
-        elif mode == "append/末尾追加":
-            combined_content = unique_elements(existing_content, new_content)
-            file.write(combined_content)
-            file.truncate()
-        else:
-            raise ValueError("Invalid mode. Must be 'overwrite/覆盖', 'prepend/前置插入', or 'append/末尾追加'.")
-
-def process_tags(folder_path, top_n, tags_to_remove, tags_to_replace, new_tag, insert_position, translate, api_key,
-                 api_url):
-    # 解析删除标签
-    tags_to_remove_list = tags_to_remove.split(',') if tags_to_remove else []
-    tags_to_remove_list = [tag.strip() for tag in tags_to_remove_list]
-
-    # 解析替换标签
-    tags_to_replace_dict = {}
-    if tags_to_replace:
-        try:
-            for pair in tags_to_replace.split(','):
-                old_tag, new_replacement_tag = pair.split(':')
-                tags_to_replace_dict[old_tag.strip()] = new_replacement_tag.strip()
-        except ValueError:
-            return "Error: Tags to replace must be in 'old_tag:new_tag' format separated by commas", None, None
-
-    # 修改文件夹中的标签
-    modify_tags_in_folder(folder_path, tags_to_remove_list, tags_to_replace_dict, new_tag, insert_position)
-
-    # 词云及网格图
-    top = int(top_n)
-    wordcloud_path = generate_wordcloud(folder_path, top)
-    networkgraph_path = generate_network_graph(folder_path, top)
-
-    # 翻译Tag功能
-    def truncate_tag(tag, max_length=30): 
-        # 截断过长标签
-        return (tag[:max_length] + '...') if len(tag) > max_length else tag
-    if translate.startswith('GPT-3.5 translation / GPT3.5翻译'):
-        translator = Translator.GPTTranslator(api_key, api_url)
-    elif translate.startswith('Free translation / 免费翻译'):
-        translator = Translator.ChineseTranslator()
-    else:
-        translator = None
-    if translator:
-        tag_counts = count_tags_in_folder(folder_path, top)
-        tags_to_translate = [tag for tag, _ in tag_counts]
-        translations = Translator.translate_tags(translator, tags_to_translate)
-        # 确保 translations 列表长度与 tag_counts 一致
-        translations.extend(["" for _ in range(len(tag_counts) - len(translations))])
-        tag_counts_with_translation = [(truncate_tag(tag_counts[i][0]), tag_counts[i][1], translations[i]) for i in
-                                       range(len(tag_counts))]
-    else:
-        tag_counts_with_translation = [(truncate_tag(tag), count, "") for tag, count in tag_counts]
-
-    return tag_counts_with_translation, wordcloud_path, networkgraph_path, "Tags processed successfully."
-
-
-# SD WebUI extensions create
+# SD WebUI extensions
 def on_ui_tabs():
     
     with gr.Blocks(analytics_enabled=False) as GPT4V_captioner_tabs:
@@ -313,6 +188,8 @@ def on_ui_tabs():
                                   lines=5)
 
         with gr.Accordion("Prompt Saving / 提示词存档", open=False):
+            def update_textbox(prompt):
+                return prompt
             saved_pro = get_prompts_from_csv()
             saved_prompts_dropdown = gr.Dropdown(label="Saved Prompts / 提示词存档", choices=saved_pro, type="value",interactive=True)
             with gr.Row():
