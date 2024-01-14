@@ -209,14 +209,17 @@ def process_tags(folder_path, top_n, tags_to_remove, tags_to_replace, new_tag, i
     def truncate_tag(tag, max_length=30): 
         # 截断过长标签
         return (tag[:max_length] + '...') if len(tag) > max_length else tag
+
+    tag_counts = count_tags_in_folder(folder_path, top)
+
     if translate.startswith('GPT-3.5 translation / GPT3.5翻译'):
         translator = Translator.GPTTranslator(api_key, api_url)
     elif translate.startswith('Free translation / 免费翻译'):
         translator = Translator.ChineseTranslator()
     else:
         translator = None
+        
     if translator:
-        tag_counts = count_tags_in_folder(folder_path, top)
         tags_to_translate = [tag for tag, _ in tag_counts]
         translations = Translator.translate_tags(translator, tags_to_translate)
         # 确保 translations 列表长度与 tag_counts 一致
