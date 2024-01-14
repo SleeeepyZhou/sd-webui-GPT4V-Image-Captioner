@@ -1,12 +1,26 @@
 import os
 import collections
 import random
-from re import S
-from wordcloud import WordCloud
+
 import matplotlib.pyplot as plt
 import networkx as nx
-from itertools import combinations
 
+from wordcloud import WordCloud
+from itertools import combinations
+from lib import Translator
+
+
+def unique_elements(original, addition):
+    original_list = list(map(str.strip, original.split(',')))
+    addition_list = list(map(str.strip, addition.split(',')))
+    combined_list = []
+    seen = set()
+    for item in original_list + addition_list:
+        if item not in seen and item != '':
+            seen.add(item)
+            combined_list.append(item)
+
+    return ', '.join(combined_list)
 
 def save_path(folder_path,file_name):
     n_path = os.path.join(folder_path, "Tag_analysis")
@@ -48,6 +62,8 @@ def modify_tags_in_folder(folder_path, tags_to_remove, tags_to_replace_dict, new
                     
     return "Tags modified successfully."
 
+
+# 词云
 def count_tags_in_folder(folder_path, top_n):
     tags_counter = collections.Counter()
     for root, dirs, files in os.walk(folder_path):
@@ -139,3 +155,75 @@ def generate_wordcloud(folder_path, top):
     plt.savefig(save_wordcloud, format='png')
     plt.close()
     return save_wordcloud
+
+# Tag处理
+def modify_file_content(file_path, new_content, mode):
+    if mode == "skip/跳过" and os.path.exists(file_path):
+        print(f"Skip writing, as the file {file_path} already exists.")
+        return
+
+    if mode == "overwrite/覆盖" or not os.path.exists(file_path):
+        with open(file_path, 'w', encoding='utf-8') as file:
+            file.write(new_content)
+        return
+
+    with open(file_path, 'r+', encoding='utf-8') as file:
+        existing_content = file.read()
+        file.seek(0)
+        if mode == "prepend/前置插入":
+            combined_content = unique_elements(new_content, existing_content)
+            file.write(combined_content)
+            file.truncate()
+        elif mode == "append/末尾追加":
+            combined_content = unique_elements(existing_content, new_content)
+            file.write(combined_content)
+            file.truncate()
+        else:
+            raise ValueError("Invalid mode. Must be 'overwrite/覆盖', 'prepend/前置插入', or 'append/末尾追加'.")
+
+def process_tags(folder_path, top_n, tags_to_remove, tags_to_replace, new_tag, insert_position, translate, api_key,
+                 api_url):
+    # 解析删除标签
+    tags_to_remove_list = tags_to_remove.split(',') if tags_to_remove else []
+    tags_to_remove_list = [tag.strip() for tag in tags_to_remove_list]
+
+    # 解析替换标签
+    tags_to_replace_dict = {}
+    if tags_to_replace:
+        try:
+            for pair in tags_to_replace.split(','):
+                old_tag, new_replacement_tag = pair.split(':')
+                tags_to_replace_dict[old_tag.strip()] = new_replacement_tag.strip()
+        except ValueError:
+            return "Error: Tags to replace must be in 'old_tag:new_tag' format separated by commas", None, None
+
+    # 修改文件夹中的标签
+    modify_tags_in_folder(folder_path, tags_to_remove_list, tags_to_replace_dict, new_tag, insert_position)
+
+    # 词云及网格图
+    top = int(top_n)
+    wordcloud_path = generate_wordcloud(folder_path, top)
+    networkgraph_path = generate_network_graph(folder_path, top)
+
+    # 翻译Tag功能
+    def truncate_tag(tag, max_length=30): 
+        # 截断过长标签
+        return (tag[:max_length] + '...') if len(tag) > max_length else tag
+    if translate.startswith('GPT-3.5 translation / GPT3.5翻译'):
+        translator = Translator.GPTTranslator(api_key, api_url)
+    elif translate.startswith('Free translation / 免费翻译'):
+        translator = Translator.ChineseTranslator()
+    else:
+        translator = None
+    if translator:
+        tag_counts = count_tags_in_folder(folder_path, top)
+        tags_to_translate = [tag for tag, _ in tag_counts]
+        translations = Translator.translate_tags(translator, tags_to_translate)
+        # 确保 translations 列表长度与 tag_counts 一致
+        translations.extend(["" for _ in range(len(tag_counts) - len(translations))])
+        tag_counts_with_translation = [(truncate_tag(tag_counts[i][0]), tag_counts[i][1], translations[i]) for i in
+                                       range(len(tag_counts))]
+    else:
+        tag_counts_with_translation = [(truncate_tag(tag), count, "") for tag, count in tag_counts]
+
+    return tag_counts_with_translation, wordcloud_path, networkgraph_path, "Tags processed successfully."
