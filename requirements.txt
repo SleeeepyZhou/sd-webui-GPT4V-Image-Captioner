@@ -1,0 +1,10 @@
+scipy
+networkx
+wordcloud
+matplotlib
+Pillow
+tqdm
+gradio
+GPUtil
+huggingface_hub
+requests
