@@ -17,7 +17,7 @@ from lib.GPT4Vapi_utils import save_api_details, get_api_details
 
 
 os.environ["GRADIO_ANALYTICS_ENABLED"] = "False"
-PROMPTS_CSV_PATH = "saved_prompts.csv"
+PROMPTS_CSV_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "saved_prompts.csv")
 should_stop = threading.Event()
 saved_api_key, saved_api_url = get_api_details()
 
@@ -179,18 +179,26 @@ def process_batch_watermark_detection(api_key, prompt, api_url, image_dir, detec
 
 
 # GPT Prompts CSV
+def get_prompts_from_csv():
+    if not os.path.exists(PROMPTS_CSV_PATH):
+        return []
+    with open(PROMPTS_CSV_PATH, 'r', newline='', encoding='utf-8') as file:
+        reader = csv.reader(file)
+        # remove empty rows
+        return [row[0] for row in reader if row]
+
 def save_prompt(prompt):
     print(f"Saving prompt: {prompt}")
-    # Append prompt to CSV file, making sure not to duplicate prompts.
+    # Append prompt to CSV
     with open(PROMPTS_CSV_PATH, 'a+', newline='', encoding='utf-8') as file:
-        # Move to the start of the file to read existing prompts
+        # Move to start
         file.seek(0)
         reader = csv.reader(file)
         existing_prompts = [row[0] for row in reader]
         if prompt not in existing_prompts:
             writer = csv.writer(file)
             writer.writerow([prompt])
-        # Move back to the end of the file for any further writes
+        # Move to end
         file.seek(0, os.SEEK_END)
     return gr.Dropdown(label="Saved Prompts", choices=get_prompts_from_csv(), type="value", interactive=True)
 
@@ -203,14 +211,6 @@ def delete_prompt(prompt):
         writer = csv.writer(writeFile)
         writer.writerows(lines)
     return gr.Dropdown(label="Saved Prompts", choices=get_prompts_from_csv(), type="value", interactive=True)
-
-def get_prompts_from_csv():
-    if not os.path.exists(PROMPTS_CSV_PATH):
-        return []
-    with open(PROMPTS_CSV_PATH, 'r', newline='', encoding='utf-8') as file:
-        reader = csv.reader(file)
-        # remove empty rows
-        return [row[0] for row in reader if row]
 
 
 # Tag Manage
