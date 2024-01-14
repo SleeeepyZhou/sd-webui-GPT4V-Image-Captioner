@@ -84,7 +84,7 @@ def generate_network_graph(folder_path, top_n):
     tags_cooccurrence = collections.defaultdict(int)
 
     # 读取文件并计算标签的共现关系
-    for root, files in os.walk(folder_path):
+    for root, dirs, files in os.walk(folder_path):
         for file in files:
             if file.endswith('.txt'):
                 file_path = os.path.join(root, file)
