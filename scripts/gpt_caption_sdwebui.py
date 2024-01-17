@@ -8,10 +8,10 @@ from tqdm import tqdm
 
 from modules import script_callbacks
 
-from lib.Img_Processing import process_images_in_folder, run_script
-from lib.Tag_Processor import modify_file_content, process_tags
-from lib.GPT_Prompt import get_prompts_from_csv, save_prompt, delete_prompt
-from lib.Api_Utils import run_openai_api, save_api_details, get_api_details
+from lib2.Img_Processing import process_images_in_folder, run_script
+from lib2.Tag_Processor import modify_file_content, process_tags
+from lib2.GPT_Prompt import get_prompts_from_csv, save_prompt, delete_prompt
+from lib2.Api_Utils import run_openai_api, save_api_details, get_api_details
 
 
 os.environ["GRADIO_ANALYTICS_ENABLED"] = "False"
