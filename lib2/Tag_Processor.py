@@ -7,7 +7,7 @@ import networkx as nx
 
 from wordcloud import WordCloud
 from itertools import combinations
-from lib import Translator
+from lib2 import Translator
 
 
 def unique_elements(original, addition):
