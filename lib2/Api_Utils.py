@@ -7,6 +7,27 @@ from urllib3.util.retry import Retry
 
 API_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), 'api_settings.json')
 
+# 扩展prompt {} 标记功能，从文件读取额外内容
+def addition_prompt_process(prompt, image_path):
+    # 从image_path分离文件名和扩展名，并更改扩展名为.txt
+    if '{' not in prompt and '}' not in prompt:
+        return prompt
+    file_root, _ = os.path.splitext(image_path)
+    new_file_name = os.path.basename(file_root) + ".txt"
+    # 从prompt中提取目录路径
+    directory_path = prompt[prompt.find('{') + 1: prompt.find('}')]
+    # 拼接新的文件路径
+    full_path = os.path.join(directory_path, new_file_name)
+    # 读取full_path指定的文件内容
+    try:
+        with open(full_path, 'r') as file:
+            file_content = file.read()
+    except Exception as e:
+        return f"Error reading file: {e}"
+
+    new_prompt = prompt.replace('{' + directory_path + '}', file_content)
+    return new_prompt
+
 # API使用
 def run_openai_api(image_path, prompt, api_key, api_url, quality=None, timeout=10):
     prompt = addition_prompt_process(prompt, image_path)
@@ -70,31 +91,10 @@ def run_openai_api(image_path, prompt, api_key, api_url, quality=None, timeout=1
         return f"Failed to parse the API response: {e}\n{response.text}"
 
 
-# 扩展prompt {} 标记功能，从文件读取额外内容
-def addition_prompt_process(prompt, image_path):
-    # 从image_path分离文件名和扩展名，并更改扩展名为.txt
-    if '{' not in prompt and '}' not in prompt:
-        return prompt
-    file_root, _ = os.path.splitext(image_path)
-    new_file_name = os.path.basename(file_root) + ".txt"
-    # 从prompt中提取目录路径
-    directory_path = prompt[prompt.find('{') + 1: prompt.find('}')]
-    # 拼接新的文件路径
-    full_path = os.path.join(directory_path, new_file_name)
-    # 读取full_path指定的文件内容
-    try:
-        with open(full_path, 'r') as file:
-            file_content = file.read()
-    except Exception as e:
-        return f"Error reading file: {e}"
-
-    new_prompt = prompt.replace('{' + directory_path + '}', file_content)
-    return new_prompt
-
-
-# API 存档
+# API存档
 def save_api_details(api_key, api_url):
     settings = {
+        'model' : 'GPT',
         'api_key': api_key,
         'api_url': api_url
     }
@@ -103,11 +103,30 @@ def save_api_details(api_key, api_url):
         with open(API_PATH, 'w', encoding='utf-8') as f:
             json.dump(settings, f)
 
+def save_state(mod):
+    settings = {
+        'model' : f'Cog-{mod}',
+        'api_key': "",
+        'api_url': "http://127.0.0.1:8000/v1/chat/completions"
+    }
+    with open(API_PATH, 'w', encoding='utf-8') as f:
+        json.dump(settings, f)
+    return f"Set {mod} as default. / {mod}已设为默认"
+
 def get_api_details():
     # 读取API设置
     settings_file = API_PATH
     if os.path.exists(settings_file):
         with open(settings_file, 'r') as f:
             settings = json.load(f)
-        return settings.get('api_key', ''), settings.get('api_url', '')
-    return '', ''
+        if settings.get('model', '') != '':
+            return settings.get('model', ''), settings.get('api_key', ''), settings.get('api_url', '')
+        else:
+            if settings.get('api_key', '') != '':
+                i_key = settings.get('api_key', '')
+                i_url = settings.get('api_url', '')
+                save_api_details(i_key,i_url)
+                with open(settings_file, 'r') as i:
+                    settings = json.load(i)
+                return settings.get('model', ''), settings.get('api_key', ''), settings.get('api_url', '')
+    return 'GPT', '', ''
