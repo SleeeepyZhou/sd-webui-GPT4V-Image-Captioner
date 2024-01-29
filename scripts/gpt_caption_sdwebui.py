@@ -15,7 +15,8 @@ from lib2.Api_Utils import run_openai_api, save_api_details, get_api_details
 
 
 os.environ["GRADIO_ANALYTICS_ENABLED"] = "False"
-saved_api_key, saved_api_url = get_api_details()
+mod_default, saved_api_key, saved_api_url = get_api_details()
+SUPPORTED_IMAGE_FORMATS = ('.png', '.jpg', '.jpeg', '.webp', '.bmp', '.gif', '.tiff', '.tif')
 
 # 图像打标
 should_stop = threading.Event()
@@ -34,11 +35,10 @@ def process_batch_images(api_key, prompt, api_url, image_dir, file_handling_mode
     save_api_details(api_key, api_url)
     results = []
 
-    supported_image_formats = ('.png', '.jpg', '.jpeg', '.webp', '.bmp', '.gif', '.tiff', '.tif')
     image_files = []
     for root, dirs, files in os.walk(image_dir):
         for file in files:
-            if file.lower().endswith(supported_image_formats):
+            if file.lower().endswith(SUPPORTED_IMAGE_FORMATS):
                 image_files.append(os.path.join(root, file))
 
     def process_image(filename, file_handling_mode):
@@ -104,6 +104,17 @@ def process_batch_images(api_key, prompt, api_url, image_dir, file_handling_mode
     print(f"Processing complete. Total images processed: {len(results)}")
     return results
 
+def handle_file(image_path, target_path, file_handling_mode):
+    try:
+        if file_handling_mode[:4] == "copy":
+            shutil.copy(image_path, target_path)
+        elif file_handling_mode[:4] == "move":
+            shutil.move(image_path, target_path)
+    except Exception as e:
+        print(f"An exception occurred while handling the file {image_path}: {e}")
+        return f"Error handling file {image_path}: {e}"
+    return
+
 def process_batch_watermark_detection(api_key, prompt, api_url, image_dir, detect_file_handling_mode, quality, timeout,
                                       watermark_dir):
     should_stop.clear()
@@ -111,11 +122,10 @@ def process_batch_watermark_detection(api_key, prompt, api_url, image_dir, detec
     results = []
     prompt = 'Is image have watermark'
 
-    supported_image_formats = ('.png', '.jpg', '.jpeg', '.webp', '.bmp', '.gif', '.tiff', '.tif')
     image_files = []
     for root, dirs, files in os.walk(image_dir):
         for file in files:
-            if file.lower().endswith(supported_image_formats):
+            if file.lower().endswith(SUPPORTED_IMAGE_FORMATS):
                 image_files.append(os.path.join(root, file))
 
     def process_image(filename, detect_file_handling_mode, watermark_dir):
@@ -127,10 +137,8 @@ def process_batch_watermark_detection(api_key, prompt, api_url, image_dir, detec
 
         # EOI是cog迷之误判？
         if 'Yes,' in caption and '\'EOI\'' not in caption:
-            if detect_file_handling_mode == "copy/复制":
-                shutil.copy(filename, watermark_dir)
-            if detect_file_handling_mode == "move/移动":
-                shutil.move(filename, watermark_dir)
+            target_path = os.path.join(watermark_dir, filename)
+            handle_file(filename, watermark_dir, detect_file_handling_mode)
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
         futures = {}
@@ -154,6 +162,96 @@ def process_batch_watermark_detection(api_key, prompt, api_url, image_dir, detec
                     print(f"An exception occurred while processing {filename}: {e}")
                 results.append(result)
                 progress.update(1)
+        finally:
+            progress.close()
+            executor.shutdown(wait=False)
+
+    results = f"Total checked images: {len(results)}"
+    return results
+
+def classify_images(api_key, api_url, quality, prompt, timeout, detect_file_handling_mode, image_dir, o_dir, *list_r):
+
+    # 初始化
+    should_stop.clear()
+    save_api_details(api_key, api_url)
+    results = []
+
+    # 检查输入
+    if not os.path.exists(image_dir):
+        return "Error: Image directory does not exist. / 错误：图片目录不存在"
+    if not o_dir:
+        o_dir = os.path.join(image_dir, "classify_output")
+    if not os.path.exists(o_dir):
+        os.makedirs(o_dir)
+
+    # 获取图像
+    image_files = []
+    for root, dirs, files in os.walk(image_dir):
+        for file in files:
+            if file.lower().endswith(SUPPORTED_IMAGE_FORMATS):
+                image_files.append(os.path.join(root, file))
+
+    # 转换列表
+    rules = []
+    for i in range(0, len(list_r), 2):
+        rule_type = list_r[i]
+        rule_input = list_r[i + 1]
+        if rule_type and rule_input:
+            rule_type_bool = rule_type == "Involve / 包含"
+            rules.append((rule_type_bool, rule_input))
+    if rules == []:
+        return "Error: All rules are empty. / 错误：未设置规则"
+
+    # 图像处理
+    def process_image(filename, rules, detect_file_handling_mode, image_dir, o_dir):
+        image_path = os.path.join(image_dir, filename)
+        caption = run_openai_api(image_path, prompt, api_key, api_url, quality, timeout)
+
+        if caption.startswith("Error:") or caption.startswith("API error:"):
+            return "error"
+
+        matching_rules = []
+        for rule_bool, rule_input in rules:
+            if (rule_bool and rule_input in caption) or (not rule_bool and rule_input not in caption):
+                matching_rules.append(rule_input)
+        
+        if matching_rules:
+            folder_name = "-".join(matching_rules)
+            target_folder = os.path.join(o_dir, folder_name)
+            os.makedirs(target_folder, exist_ok=True)
+            handle_file(filename, target_folder, detect_file_handling_mode)
+        elif matching_rules == []:
+            no_match_folder = os.path.join(o_dir, "no_match")
+            os.makedirs(no_match_folder, exist_ok=True)
+            handle_file(filename, no_match_folder, detect_file_handling_mode)
+
+    # 批量处理
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+        futures = {}
+        for filename in image_files:
+            future = executor.submit(process_image, filename, rules, detect_file_handling_mode, image_dir, o_dir)
+            futures[future] = filename  # 将 future 和 filename 映射起来
+        progress = tqdm(total=len(futures), desc="Processing images")
+
+        try:
+            for future in concurrent.futures.as_completed(futures):
+                filename = futures[future]  # 获取正在处理的文件名
+
+                if should_stop.is_set():
+                    for f in futures:
+                        f.cancel()
+                    print("Batch processing was stopped by the user.")
+                    break
+
+                try:
+                    result = future.result()
+                except Exception as e:
+                    result = (filename, f"An exception occurred: {e}")
+                    print(f"An exception occurred while processing {filename}: {e}")
+                results.append(result)
+                progress.update(1)
+
+
         finally:
             progress.close()
             executor.shutdown(wait=False)
