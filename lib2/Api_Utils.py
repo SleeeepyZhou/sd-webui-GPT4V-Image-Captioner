@@ -5,6 +5,7 @@ import requests
 import re
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+import urllib.parse
 
 API_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), 'api_settings.json')
 
@@ -32,10 +33,11 @@ def addition_prompt_process(prompt, image_path):
 # API使用
 
 def qwen_api(image_path, prompt, api_key):
-    print(image_path)
+    
     os.environ['DASHSCOPE_API_KEY'] = api_key
     from dashscope import MultiModalConversation
-    img = f"file://{image_path}"
+    encoded_image_path = urllib.parse.quote(image_path, safe='')
+    img = f"file://{encoded_image_path}"
     messages = [{
         'role': 'system',
         'content': [
