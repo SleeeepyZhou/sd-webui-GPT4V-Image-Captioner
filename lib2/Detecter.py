@@ -11,30 +11,27 @@ def check_memory():
     return "Insufficient GPU graphics memory for use."
 
 
-def read_requirements(file_path):
+def install_detection(requir_path):
+    # 读
+    file_path = requir_path
     requirements = []
     with open(file_path, 'r') as file:
         for line in file:
             requirements.append(line.strip())
 
-    return requirements
-
-def check_lib(requirements):
+    # 查
     missing_libs = []
     for libs in requirements:
         try:
             importlib.import_module(libs)
         except ImportError:
             missing_libs.append(libs)
+
     return missing_libs
 
-def install_detection():
-    requir = read_requirements("./install_script/check.txt")
-    miss = check_lib(requir)
-    if miss == []:
-        output = "All listed libraries are installed."
+def print_missing(missing_libs):
+    # 返
+    if missing_libs == []:
+        return ""
     else:
-        output = f"Not installed libraries: {', '.join(miss)}"
-    return output
-
-subprocess.run(['powershell.exe', '-ExecutionPolicy', 'Bypass', '-File', './install_script/check_install.ps1'],shell=True)
+        return f"Not installed libraries: {', '.join(missing_libs)}"

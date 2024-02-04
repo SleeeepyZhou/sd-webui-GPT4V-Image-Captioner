@@ -2,6 +2,7 @@ import os
 import json
 import base64
 import requests
+import re
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
@@ -29,9 +30,51 @@ def addition_prompt_process(prompt, image_path):
     return new_prompt
 
 # API使用
+
+def qwen_api(image_path, prompt, api_key):
+    print(image_path)
+    os.environ['DASHSCOPE_API_KEY'] = api_key
+    from dashscope import MultiModalConversation
+    img = f"file://{image_path}"
+    messages = [{
+        'role': 'system',
+        'content': [
+            {'text': 'You are a helpful assistant.'}
+            ]
+        }, {
+        'role':'user',
+        'content': [
+            {'image': img},
+            {'text': prompt},
+            ]
+        }]
+
+    response = MultiModalConversation.call(model='qwen-vl-plus', messages=messages, stream=False, max_length=300)
+    if 'error' in response:
+        return f"API error: {response['error']['message']}"
+    if response["output"]["choices"][0]["message"]["content"][0].get("text", False):
+        caption = response["output"]["choices"][0]["message"]["content"][0]["text"]
+    else:
+        box_value = response["output"]["choices"][0]["message"]["content"][0]["box"]
+        text_value = response["output"]["choices"][0]["message"]["content"][1]["text"]
+        b_value = re.search(r'<ref>(.*?)</ref>', box_value).group(1)
+        caption = b_value + text_value
+    return caption
+
+def is_ali(api_url):
+    if api_url.endswith("/v1/services/aigc/multimodal-generation/generation"):
+        return True
+    else:
+        return False
+
 def run_openai_api(image_path, prompt, api_key, api_url, quality=None, timeout=10):
     prompt = addition_prompt_process(prompt, image_path)
     # print("prompt{}:",prompt)
+
+    # Qwen-VL
+    if is_ali(api_url):
+        return qwen_api(image_path, prompt, api_key)
+
     with open(image_path, "rb") as image_file:
         image_base64 = base64.b64encode(image_file.read()).decode('utf-8')
 
@@ -103,15 +146,24 @@ def save_api_details(api_key, api_url):
         with open(API_PATH, 'w', encoding='utf-8') as f:
             json.dump(settings, f)
 
-def save_state(mod):
-    settings = {
-        'model' : f'Cog-{mod}',
-        'api_key': "",
-        'api_url': "http://127.0.0.1:8000/v1/chat/completions"
-    }
+def save_state(llm, mod, key, url):
+    if llm == "GPT":
+        settings = {
+            'model': 'GPT',
+            'api_key': key,
+            'api_url': url
+        }
+        output = f"Set {llm} as default. / {llm}已设为默认"
+    else:
+        settings = {
+            'model' : f'Cog-{mod}',
+            'api_key': "",
+            'api_url': "http://127.0.0.1:8000/v1/chat/completions"
+        }
+        output = f"Set {mod} as default. / {mod}已设为默认"
     with open(API_PATH, 'w', encoding='utf-8') as f:
         json.dump(settings, f)
-    return f"Set {mod} as default. / {mod}已设为默认"
+    return output
 
 def get_api_details():
     # 读取API设置
