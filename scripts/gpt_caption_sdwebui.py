@@ -11,7 +11,7 @@ from modules import script_callbacks
 from lib2.Img_Processing import process_images_in_folder, run_script
 from lib2.Tag_Processor import modify_file_content, process_tags
 from lib2.GPT_Prompt import get_prompts_from_csv, save_prompt, delete_prompt
-from lib2.Api_Utils import run_openai_api, save_api_details, get_api_details
+from lib2.Api_Utils import run_openai_api, save_api_details, get_api_details, save_state, qwen_api_switch
 
 
 os.environ["GRADIO_ANALYTICS_ENABLED"] = "False"
@@ -259,6 +259,19 @@ def classify_images(api_key, api_url, quality, prompt, timeout, detect_file_hand
     results = f"Total checked images: {len(results)}"
     return results
 
+# api
+def switch_API(api, state):
+    if api[:3] == 'GPT' or api[:4] == "qwen":
+        key = saved_api_key
+        url = saved_api_url
+        time_out = 10
+        if api[:4] == "qwen" and url.endswith("/v1/services/aigc/multimodal-generation/generation"):
+            mod = qwen_api_switch(api)
+        else:
+            mod = 'GPT4V'
+        s_state = mod
+
+    return key, url, time_out, s_state
 
 # SD WebUI extensions
 def on_ui_tabs():
@@ -482,7 +495,25 @@ def on_ui_tabs():
                                             tags_to_replace_input, new_tag_input, insert_position_input,
                                             translate_tags_input, api_key_input, api_url_input], # 新增翻译复选框
                                       outputs=[tag_counts_output, wordcloud_output, network_graph_output, output_message])
+        # API Config
+        with gr.Tab("API Config / API配置"):
+        
+            # API配置
+            mod_list = [
+                "GPT4V",
+                "qwen-vl-plus",
+                "qwen-vl-max",
+                ]
 
+            with gr.Row():
+                switch_select = gr.Dropdown(label="Choose API / 选择API", choices=mod_list, value="GPT4V")
+                A_state = gr.Textbox(label="API State / API状态", interactive=False, value=mod_default)
+                switch_button = gr.Button("Switch / 切换", variant='primary')
+                set_default = gr.Button("Set as default / 设为默认", variant='primary')
+
+            switch_button.click(switch_API, inputs=[switch_select, A_state],
+                                outputs=[api_key_input, api_url_input, timeout_input, A_state])
+            set_default.click(save_state, inputs=[switch_select, api_key_input, api_url_input], outputs=A_state)
         gr.Markdown(
             "### Developers: [Jiaye](https://civitai.com/user/jiayev1),&nbsp;&nbsp;[LEOSAM 是只兔狲](https://civitai.com/user/LEOSAM),&nbsp;&nbsp;[SleeeepyZhou](https://civitai.com/user/SleeeepyZhou),&nbsp;&nbsp;[Fok](https://civitai.com/user/fok3827)&nbsp;&nbsp;|&nbsp;&nbsp;Welcome everyone to add more new features to this project.")
 
