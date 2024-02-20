@@ -398,6 +398,7 @@ def on_ui_tabs():
                     detect_stop_button.click(stop_batch_processing, inputs=[], outputs=detect_batch_output)
             with gr.Tab("Tag Polishing / 标签润色"):
                 gr.Markdown("""
+                    RAG：全称Retrieval-Augmented Generation，检索增强生成。我们知道本次由ChatGPT掀起的LLM大模型浪潮，其核心就是Generation生成，而 Retrieval-augmented 就是指除了 LLM 本身已经学到的知识之外，通过外挂其他数据源的方式来增强 LLM 的能力，这其中就包括了外部向量数据库、外部知识图谱、文档数据，WEB数据等。
                         使用其他打标器(如WD1.4)对图片进行打标后，在上方prompt中使用“Describe this image in a very detailed manner and refer these prompt tags:{大括号里替换为放置额外tags文件的目录，会自动读取和图片同名txt。比如 D:\ abc\}”\n
                         After marking the image using other captioner(such as WD1.4), enter the prompt in the “” marks in the prompt box.
                             “Describe this image in a very detailed manner and refer these prompt tags:
