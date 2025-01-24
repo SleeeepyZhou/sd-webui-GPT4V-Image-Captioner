@@ -5,4 +5,4 @@ This is an SD WebUI plugin version of the GPT4V Image Captioner, a multifunction
 
 [Original project address](https://github.com/jiayev/GPT4V-Image-Captioner)
 
-[<img src="https://api.gitsponsors.com/api/badge/img?id=743057211" height="20">](https://api.gitsponsors.com/api/badge/link?p=oImQAmBEw7SytdATIUPLgcIxLWlXOmOErwBUdlLAhfAXbs849JP1J9Mk4VOadNsZ)
+[<img src="https://api.gitsponsors.com/api/badge/img?id=743057211" height="20">](https://api.gitsponsors.com/api/badge/link?p=oImQAmBEw7SytdATIUPLgfTvhBwiBOcBQhkP9uRGLesn8sfw8zvCcuF8A/Ya2hEMCHYp5fwAHT+TblWDyWIl8vulhhrvgbpUARgNSrLXLoqITFsfHMWVgoq4XL+lJqyAp/ceWHzU/P/9sUBQA5DDyA==)
